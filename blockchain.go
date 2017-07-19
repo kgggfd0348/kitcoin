@@ -6,7 +6,7 @@ import (
 )
 
 type Block struct {
-	prevHash     [32]byte
+	prevHash     SHA
 	nonce        int
 	transactions []Transaction
 }
@@ -22,7 +22,7 @@ func NewBlockChain() BlockChain {
 	return BlockChain{blocks}
 }
 
-func (block *Block) hashBlock() ([32]byte, error) {
+func (block *Block) hashBlock() (SHA, error) {
 	contents := make([]byte, 0)
 	contents = append(contents, block.prevHash[:]...)
 	nonceBytes := make([]byte, 8)
@@ -30,12 +30,12 @@ func (block *Block) hashBlock() ([32]byte, error) {
 	contents = append(contents, nonceBytes...)
 
 	for _, t := range block.transactions {
-		hashedTransaction, err := hashTransaction(t)
+		hashedTransaction, err := t.Hash()
 		if err != nil {
-			var empty [32]byte
+			var empty SHA
 			return empty, err
 		}
-		contents = append(contents, hashedTransaction...)
+		contents = append(contents, hashedTransaction[:]...)
 	}
 
 	hash := sha256.Sum256(contents)
