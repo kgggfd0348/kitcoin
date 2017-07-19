@@ -1,4 +1,4 @@
-package main
+package ktcoin
 
 import (
 	"crypto/rand"

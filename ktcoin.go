@@ -1,4 +1,4 @@
-package main
+package ktcoin
 
 import (
 	"bytes"
@@ -7,13 +7,10 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/binary"
 	"encoding/pem"
 	"errors"
-	"flag"
 	"fmt"
 	"io/ioutil"
-	"os"
 )
 
 type Transaction struct {
@@ -101,7 +98,7 @@ func (coin *Coin) transfer(fromKey *rsa.PrivateKey, toKey *rsa.PublicKey) error 
 	return nil
 }
 
-func generateKey(keyname string) error {
+func GenerateKey(keyname string) error {
 	fmt.Println("Generating RSA private key...")
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -131,7 +128,7 @@ func generateKey(keyname string) error {
 	return nil
 }
 
-func loadKey(keyname string) (*rsa.PrivateKey, error) {
+func LoadKey(keyname string) (*rsa.PrivateKey, error) {
 	privKeyPem, err := ioutil.ReadFile(keyname)
 	if err != nil {
 		return nil, err
@@ -180,98 +177,3 @@ func (coin *Coin) Verify() error {
 	return nil
 }
 
-type Block struct {
-	prevHash     [32]byte
-	nonce        int
-	transactions []Transaction
-}
-
-type BlockChain struct {
-	blocks []Block
-}
-
-func NewBlockChain() BlockChain {
-	genesisHash := sha256.Sum256([]byte("genesis"))
-	blocks := make([]Block, 0)
-	blocks = append(blocks, Block{genesisHash, 0, make([]Transaction, 0)})
-	return BlockChain{blocks}
-}
-
-func (block *Block) hashBlock() ([32]byte, error) {
-	contents := make([]byte, 0)
-	contents = append(contents, block.prevHash[:]...)
-	nonceBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(nonceBytes, uint64(block.nonce))
-	contents = append(contents, nonceBytes...)
-
-	for _, t := range block.transactions {
-		hashedTransaction, err := hashTransaction(t)
-		if err != nil {
-			var empty [32]byte
-			return empty, err
-		}
-		contents = append(contents, hashedTransaction...)
-	}
-
-	hash := sha256.Sum256(contents)
-	return hash, nil
-}
-
-func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
-	mostRecentBlock := bc.blocks[len(bc.blocks)-1]
-	prevHash, err := mostRecentBlock.hashBlock()
-	if err != nil {
-		return err
-	}
-	nonce := 0
-	newBlock := Block{prevHash, nonce, transactions}
-	hashedBlock, err := newBlock.hashBlock()
-	if err != nil {
-		return err
-	}
-	for hashedBlock[0] != 0 {
-		newBlock.nonce++
-		hashedBlock, err = newBlock.hashBlock()
-		if err != nil {
-			return err
-		}
-	}
-	bc.blocks = append(bc.blocks, newBlock)
-	return nil
-}
-
-func main() {
-	var generateNewKey = flag.Bool("generate", false, "Generate a new RSA keypair")
-	var keyname = flag.String("keyname", "id_rsa", "The name of the key file")
-	flag.Parse()
-
-	if *generateNewKey {
-		err := generateKey(*keyname)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		fmt.Println("Generated key.")
-	}
-
-	key, err := loadKey(*keyname)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	message := []byte("hi there")
-	hashed := sha256.Sum256(message)
-	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, hashed[:])
-
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	err = rsa.VerifyPKCS1v15(&key.PublicKey, crypto.SHA256, hashed[:], signature)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	fmt.Printf("%x\n", signature)
-}
