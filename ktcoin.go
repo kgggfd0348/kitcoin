@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -21,7 +22,7 @@ type Transaction struct {
 }
 
 func (t Transaction) String() string {
-	return "<Transaction" + string(t.prevTxHash) + " >"
+	return fmt.Sprintf("<Transaction %x >", t.prevTxHash)
 }
 
 func hashTransaction(t Transaction) ([]byte, error) {
@@ -146,6 +147,44 @@ func loadKey(keyname string) (*rsa.PrivateKey, error) {
 	}
 
 	return privKey, nil
+}
+
+func (coin *Coin) Verify() error {
+
+	for i := 1; i < len(*coin); i++ {
+		fmt.Printf("Checking transaction %d\n", i)
+		currentTransaction := (*coin)[i]
+		prevTransaction := (*coin)[i-1]
+		prevHash, err := hashTransaction(prevTransaction)
+		if err != nil {
+			return err
+		}
+
+		if !bytes.Equal(prevHash, currentTransaction.prevTxHash) {
+			return errors.New("Hash values are not the same")
+		}
+
+		keyBytes, err := x509.MarshalPKIXPublicKey(currentTransaction.recipientKey)
+		if err != nil {
+			return err
+		}
+
+		toSign := append(prevHash, keyBytes...)
+		hashed := sha256.Sum256(toSign)
+		err = rsa.VerifyPKCS1v15(prevTransaction.recipientKey, crypto.SHA256, hashed[:], currentTransaction.signature)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type BlockChain []Block
+
+type Block struct {
+	prevHash     []byte
+	nonce        int
+	transactions []Transaction
 }
 
 func main() {
