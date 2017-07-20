@@ -1,6 +1,7 @@
 package ktcoin
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
 	"testing"
 )
@@ -66,9 +67,10 @@ import (
 
 func TestAddBlock(t *testing.T) {
 	bc := NewBlockChain()
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
 	transactions := make([]Transaction, 0)
 	signature := make([]byte, 0)
-	transactions = append(transactions, Transaction{make([]SHA, 0), make(map[*rsa.PublicKey]int, 0), signature})
+	transactions = append(transactions, Transaction{make([]SHA, 0), &key.PublicKey, &key.PublicKey, make(map[*rsa.PublicKey]int, 0), signature})
 	bc.addNextBlock(transactions)
 	if len(bc.blocks) != 2 {
 		t.Fail()

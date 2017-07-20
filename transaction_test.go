@@ -1,11 +1,11 @@
 package ktcoin
 
 import (
-	"testing"
-	"crypto/rsa"
-	"crypto/rand"
-	"crypto/sha256"
 	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"testing"
 )
 
 func TestNewTransaction(t *testing.T) {
@@ -18,7 +18,7 @@ func TestNewTransaction(t *testing.T) {
 	dummyOutputs[&sender.PublicKey] = 2
 	bytesToSign := sha256.Sum256([]byte("dummy data"))
 	dummySignature, _ := rsa.SignPKCS1v15(rand.Reader, sender, crypto.SHA256, bytesToSign[:])
-	dummyTransaction := Transaction{[]SHA{}, dummyOutputs, dummySignature}
+	dummyTransaction := Transaction{[]SHA{}, &sender.PublicKey, &recipient.PublicKey, dummyOutputs, dummySignature}
 
 	inputs := []Transaction{
 		dummyTransaction,

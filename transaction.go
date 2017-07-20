@@ -27,6 +27,8 @@ import (
 //     transactions (they all have to be owned by the same key)
 type Transaction struct {
 	inputs    []SHA
+	sender    *rsa.PublicKey
+	recipient *rsa.PublicKey
 	outputs   map[*rsa.PublicKey]int
 	signature []byte
 }
@@ -59,6 +61,18 @@ func (t *Transaction) Hash() (SHA, error) {
 	return hash, nil
 }
 
+func bytesToSign(recipient *rsa.PublicKey, inputHashes []SHA) (SHA, error) {
+	bytesToHash, err := x509.MarshalPKIXPublicKey(recipient)
+	if err != nil {
+		var empty SHA
+		return empty, err
+	}
+	for _, inputHash := range inputHashes {
+		bytesToHash = append(bytesToHash, inputHash[:]...)
+	}
+	return sha256.Sum256(bytesToHash), nil
+}
+
 // Creates a new transaction struct, verifying that the input
 // transactions have enough funds and sending any remaining funds from
 // the input transactions back to the sender.
@@ -81,11 +95,6 @@ func NewTransaction(inputs []Transaction, sender *rsa.PrivateKey, recipient *rsa
 		outputs[&sender.PublicKey] = change
 	}
 
-	bytesToHash, err := x509.MarshalPKIXPublicKey(recipient)
-	if err != nil {
-		return nil, err
-	}
-
 	inputHashes := make([]SHA, 0)
 	for _, input := range inputs {
 		hash, err := input.Hash()
@@ -93,18 +102,24 @@ func NewTransaction(inputs []Transaction, sender *rsa.PrivateKey, recipient *rsa
 		if err != nil {
 			return nil, err
 		}
-		bytesToHash = append(bytesToHash, hash[:]...)
 	}
 
-	hashed := sha256.Sum256(bytesToHash)
-	signature, err := rsa.SignPKCS1v15(rand.Reader, sender, crypto.SHA256, hashed[:])
-
+	hashed, err := bytesToSign(recipient, inputHashes)
 	if err != nil {
 		return nil, err
 	}
 
+	signature, err := rsa.SignPKCS1v15(rand.Reader, sender, crypto.SHA256, hashed[:])
+	if err != nil {
+		return nil, err
+	}
+
+	senderPubKey := &sender.PublicKey
+
 	return &Transaction{
 		inputHashes,
+		senderPubKey,
+		recipient,
 		outputs,
 		signature,
 	}, nil
