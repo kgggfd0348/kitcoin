@@ -1,8 +1,11 @@
 package ktcoin
 
 import (
+	"crypto"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 )
 
 // A Block consists of the previous block's hash, the list of
@@ -78,3 +81,27 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 //   another transaction)
 
 // How to store information on the block chain? Keep a set of transactions open for spending?
+func (bc *BlockChain) Verify(t Transaction) error {
+	// Verify signature
+	hashed, err := bytesToSign(t.recipient, t.inputs)
+	if err != nil {
+		return err
+	}
+	err = rsa.VerifyPKCS1v15(t.sender, crypto.SHA256, hashed[:], t.signature)
+	if err != nil {
+		return err
+	}
+	// Verify tx not used as input elsewhere in BlockChain
+	for _, block := range bc.blocks {
+		for _, transaction := range block.transactions {
+			for _, input := range transaction.inputs {
+				for _, currInput := range t.inputs {
+					if input == currInput {
+						return errors.New("Transaction input has already been used")
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
