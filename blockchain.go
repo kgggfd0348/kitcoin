@@ -74,6 +74,18 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 		}
 	}
 	bc.blocks = append(bc.blocks, newBlock)
+
+	for _, transaction := range transactions {
+		for _, input := range transaction.inputs {
+			delete(bc.openTransactions[input], transaction.sender)
+		}
+		hashedTransaction, err := transaction.Hash()
+		if err != nil {
+			return err
+		}
+
+		bc.openTransactions[hashedTransaction] = transaction.outputs
+	}
 	return nil
 }
 

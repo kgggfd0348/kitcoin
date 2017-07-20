@@ -19,10 +19,10 @@ func TestVerifyTransaction(t *testing.T) {
 	dummyOutputs[&sender.PublicKey] = 2
 	bytesToSign := sha256.Sum256([]byte("dummy data"))
 	dummySignature, _ := rsa.SignPKCS1v15(rand.Reader, sender, crypto.SHA256, bytesToSign[:])
-	dummyTransaction := Transaction{[]SHA{}, &sender.PublicKey, &recipient.PublicKey, dummyOutputs, dummySignature}
+	inputTransaction := Transaction{[]SHA{}, &sender.PublicKey, &sender.PublicKey, dummyOutputs, dummySignature}
 
 	inputs := []Transaction{
-		dummyTransaction,
+		inputTransaction,
 	}
 
 	tx, err := NewTransaction(inputs, sender, &recipient.PublicKey, 1)
@@ -30,8 +30,19 @@ func TestVerifyTransaction(t *testing.T) {
 		t.Error(err)
 	}
 	verifyErr := bc.Verify(tx)
-	// Will fail because dummyTransaction is not in blockchain
+	// Will fail because input transactions are not in blockchain
 	if verifyErr == nil {
+		t.Fail()
+	}
+
+	err = bc.addNextBlock(inputs)
+	if err != nil {
+		t.Fail()
+	}
+
+	verifyErr = bc.Verify(tx)
+	// Will succeed because input transactions are now in blockchain
+	if verifyErr != nil {
 		t.Fail()
 	}
 }
