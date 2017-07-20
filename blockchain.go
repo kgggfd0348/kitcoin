@@ -55,6 +55,26 @@ func (block *Block) Hash() (SHA, error) {
 }
 
 func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
+	// Verify transactions
+	for i, t := range transactions {
+		if i == 0 {
+			// Special case: money from nothing
+			outputTotal := 0
+			for _, v := range t.outputs {
+				outputTotal += v
+			}
+			if outputTotal != 25 {
+				return errors.New("Invalid genesis transaction: does not create 25 coins")
+			}
+		} else {
+			err := bc.Verify(&t)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Look for the magic hash value
 	mostRecentBlock := bc.blocks[len(bc.blocks)-1]
 	prevHash, err := mostRecentBlock.Hash()
 	if err != nil {
@@ -73,6 +93,8 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 			return err
 		}
 	}
+
+	// Append the block to the chain
 	bc.blocks = append(bc.blocks, newBlock)
 
 	for _, transaction := range transactions {
@@ -106,8 +128,9 @@ func (bc *BlockChain) Verify(t *Transaction) error {
 	}
 	err = rsa.VerifyPKCS1v15(t.sender, crypto.SHA256, hashed[:], t.signature)
 	if err != nil {
-		return err
+		return errors.New("invalid signature")
 	}
+
 	// Verify tx inputs are keys in t.openTransactions
 	for _, input := range t.inputs {
 		if val, ok := bc.openTransactions[input]; ok {
@@ -117,6 +140,23 @@ func (bc *BlockChain) Verify(t *Transaction) error {
 		} else {
 			return errors.New("Transaction not open")
 		}
+	}
+
+	// Verify tx amounts are valid (inputs equal outputs)
+	inputTotal := 0
+	for _, inputSha := range t.inputs {
+		outputAmounts, _ := bc.openTransactions[inputSha]
+		senderAmount, _ := outputAmounts[t.sender]
+		inputTotal += senderAmount
+	}
+
+	outputTotal := 0
+	for _, amount := range t.outputs {
+		outputTotal += amount
+	}
+
+	if inputTotal != outputTotal {
+		return errors.New("tx inputs do not match outputs")
 	}
 
 	return nil

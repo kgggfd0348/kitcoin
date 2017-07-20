@@ -4,7 +4,6 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"testing"
 )
 
@@ -16,9 +15,9 @@ func TestVerifyTransaction(t *testing.T) {
 	// Build a dummy transaction to serve as input
 	dummyOutputs := make(map[*rsa.PublicKey]int)
 	// Give sender 2 coins to send
-	dummyOutputs[&sender.PublicKey] = 2
-	bytesToSign := sha256.Sum256([]byte("dummy data"))
-	dummySignature, _ := rsa.SignPKCS1v15(rand.Reader, sender, crypto.SHA256, bytesToSign[:])
+	dummyOutputs[&sender.PublicKey] = 25
+	bytes, _ := bytesToSign(&sender.PublicKey, []SHA{})
+	dummySignature, _ := rsa.SignPKCS1v15(rand.Reader, sender, crypto.SHA256, bytes[:])
 	inputTransaction := Transaction{[]SHA{}, &sender.PublicKey, &sender.PublicKey, dummyOutputs, dummySignature}
 
 	inputs := []Transaction{
@@ -37,12 +36,41 @@ func TestVerifyTransaction(t *testing.T) {
 
 	err = bc.addNextBlock(inputs)
 	if err != nil {
-		t.Fail()
+		t.Error(err)
 	}
 
 	verifyErr = bc.Verify(tx)
 	// Will succeed because input transactions are now in blockchain
 	if verifyErr != nil {
+		t.Error(err)
+	}
+}
+
+func TestAddBlock(t *testing.T) {
+	bc := NewBlockChain()
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	transactions := make([]Transaction, 0)
+
+	recipient := &key.PublicKey
+	inputs := make([]SHA, 0)
+
+	toSign, _ := bytesToSign(recipient, inputs)
+	signature, _ := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, toSign[:])
+	outputs := make(map[*rsa.PublicKey]int, 0)
+	outputs[recipient] = 25
+	tx := Transaction{
+		inputs,
+		&key.PublicKey,
+		recipient,
+		outputs,
+		signature,
+	}
+	transactions = append(transactions, tx)
+	err := bc.addNextBlock(transactions)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(bc.blocks) != 2 {
 		t.Fail()
 	}
 }

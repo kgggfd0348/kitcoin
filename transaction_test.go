@@ -15,7 +15,7 @@ func TestNewTransaction(t *testing.T) {
 	// Build a dummy transaction to serve as input
 	dummyOutputs := make(map[*rsa.PublicKey]int)
 	// Give sender 2 coins to send
-	dummyOutputs[&sender.PublicKey] = 2
+	dummyOutputs[&sender.PublicKey] = 25
 	bytesToSign := sha256.Sum256([]byte("dummy data"))
 	dummySignature, _ := rsa.SignPKCS1v15(rand.Reader, sender, crypto.SHA256, bytesToSign[:])
 	dummyTransaction := Transaction{[]SHA{}, &sender.PublicKey, &recipient.PublicKey, dummyOutputs, dummySignature}
@@ -37,12 +37,12 @@ func TestNewTransaction(t *testing.T) {
 	}
 
 	// Check for change.
-	if tx.outputs[&sender.PublicKey] != 1 || tx.outputs[&recipient.PublicKey] != 1 {
+	if tx.outputs[&sender.PublicKey] != 24 || tx.outputs[&recipient.PublicKey] != 1 {
 		t.Fail()
 	}
 
 	// Try sending too much.
-	_, err = NewTransaction(inputs, sender, &recipient.PublicKey, 3)
+	_, err = NewTransaction(inputs, sender, &recipient.PublicKey, 30)
 
 	if err == nil {
 		t.Fail()
