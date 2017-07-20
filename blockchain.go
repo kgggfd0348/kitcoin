@@ -5,6 +5,10 @@ import (
 	"encoding/binary"
 )
 
+// A Block consists of the previous block's hash, the list of
+// transactions it enacts, and a nonce.  For a block to be valid, the
+// SHA256 hash must have sufficient leading zeroes to satisfy the
+// proof of work property.
 type Block struct {
 	prevHash     SHA
 	nonce        int
@@ -22,7 +26,7 @@ func NewBlockChain() BlockChain {
 	return BlockChain{blocks}
 }
 
-func (block *Block) hashBlock() (SHA, error) {
+func (block *Block) Hash() (SHA, error) {
 	contents := make([]byte, 0)
 	contents = append(contents, block.prevHash[:]...)
 	nonceBytes := make([]byte, 8)
@@ -44,19 +48,19 @@ func (block *Block) hashBlock() (SHA, error) {
 
 func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 	mostRecentBlock := bc.blocks[len(bc.blocks)-1]
-	prevHash, err := mostRecentBlock.hashBlock()
+	prevHash, err := mostRecentBlock.Hash()
 	if err != nil {
 		return err
 	}
 	nonce := 0
 	newBlock := Block{prevHash, nonce, transactions}
-	hashedBlock, err := newBlock.hashBlock()
+	hashedBlock, err := newBlock.Hash()
 	if err != nil {
 		return err
 	}
 	for hashedBlock[0] != 0 {
 		newBlock.nonce++
-		hashedBlock, err = newBlock.hashBlock()
+		hashedBlock, err = newBlock.Hash()
 		if err != nil {
 			return err
 		}
