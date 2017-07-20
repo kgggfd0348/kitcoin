@@ -35,6 +35,9 @@ func (t Transaction) String() string {
 	return fmt.Sprintf("<Transaction %x>", t.signature)
 }
 
+// Computes the hash of a transaction by concatenating the hashes of
+// the transaction's inputs with the key of the transaction's
+// recipient.
 func (t *Transaction) Hash() (SHA, error) {
 	toHash := make([]byte, 0)
 	for _, input := range t.inputs {
@@ -56,6 +59,9 @@ func (t *Transaction) Hash() (SHA, error) {
 	return hash, nil
 }
 
+// Creates a new transaction struct, verifying that the input
+// transactions have enough funds and sending any remaining funds from
+// the input transactions back to the sender.
 func NewTransaction(inputs []Transaction, sender *rsa.PrivateKey, recipient *rsa.PublicKey, amount int) (*Transaction, error) {
 	inputTotal := 0
 	for _, inputTx := range inputs {
