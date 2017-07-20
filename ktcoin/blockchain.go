@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 )
 
 // A Block consists of the previous block's hash, the list of
@@ -20,21 +21,21 @@ type Block struct {
 
 type BlockChain struct {
 	blocks           []Block
-	openTransactions map[SHA]map[*rsa.PublicKey]int
+	openTransactions map[SHA]map[string]int
 }
 
 func NewBlockChain() BlockChain {
 	genesisHash := sha256.Sum256([]byte("genesis"))
 	blocks := make([]Block, 0)
 	blocks = append(blocks, Block{genesisHash, 0, make([]Transaction, 0)})
-	openTransactions := make(map[SHA]map[*rsa.PublicKey]int)
+	openTransactions := make(map[SHA]map[string]int)
 	return BlockChain{
 		blocks,
 		openTransactions,
 	}
 }
 
-func (block *Block) Hash() (SHA, error) {
+func (block *Block) Hash() SHA {
 	contents := make([]byte, 0)
 	contents = append(contents, block.prevHash[:]...)
 	nonceBytes := make([]byte, 8)
@@ -42,16 +43,25 @@ func (block *Block) Hash() (SHA, error) {
 	contents = append(contents, nonceBytes...)
 
 	for _, t := range block.transactions {
-		hashedTransaction, err := t.Hash()
-		if err != nil {
-			var empty SHA
-			return empty, err
-		}
+		hashedTransaction := t.Hash()
 		contents = append(contents, hashedTransaction[:]...)
 	}
 
 	hash := sha256.Sum256(contents)
-	return hash, nil
+	return hash
+}
+
+func (bc *BlockChain) GetOpenInputs(key rsa.PublicKey) map[SHA]int {
+	openInputs := make(map[SHA]int)
+
+	for sha, outputs := range bc.openTransactions {
+		amount, isPresent := outputs[publicKeyString(key)]
+		if isPresent {
+			openInputs[sha] = amount
+		}
+	}
+
+	return openInputs
 }
 
 func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
@@ -69,6 +79,7 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 		} else {
 			err := bc.Verify(&t)
 			if err != nil {
+				fmt.Println("verification error")
 				return err
 			}
 		}
@@ -76,36 +87,26 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 
 	// Look for the magic hash value
 	mostRecentBlock := bc.blocks[len(bc.blocks)-1]
-	prevHash, err := mostRecentBlock.Hash()
-	if err != nil {
-		return err
-	}
+	prevHash := mostRecentBlock.Hash()
+
 	nonce := 0
 	newBlock := Block{prevHash, nonce, transactions}
-	hashedBlock, err := newBlock.Hash()
-	if err != nil {
-		return err
-	}
+	hashedBlock := newBlock.Hash()
+
 	for hashedBlock[0] != 0 {
 		newBlock.nonce++
-		hashedBlock, err = newBlock.Hash()
-		if err != nil {
-			return err
-		}
+		hashedBlock = newBlock.Hash()
 	}
 
 	// Append the block to the chain
 	bc.blocks = append(bc.blocks, newBlock)
+	fmt.Println(len(bc.blocks))
 
 	for _, transaction := range transactions {
 		for _, input := range transaction.inputs {
-			delete(bc.openTransactions[input], transaction.sender)
+			delete(bc.openTransactions[input], publicKeyString(transaction.sender))
 		}
-		hashedTransaction, err := transaction.Hash()
-		if err != nil {
-			return err
-		}
-
+		hashedTransaction := transaction.Hash()
 		bc.openTransactions[hashedTransaction] = transaction.outputs
 	}
 	return nil
@@ -126,7 +127,7 @@ func (bc *BlockChain) Verify(t *Transaction) error {
 	if err != nil {
 		return err
 	}
-	err = rsa.VerifyPKCS1v15(t.sender, crypto.SHA256, hashed[:], t.signature)
+	err = rsa.VerifyPKCS1v15(&t.sender, crypto.SHA256, hashed[:], t.signature)
 	if err != nil {
 		return errors.New("invalid signature")
 	}
@@ -134,7 +135,7 @@ func (bc *BlockChain) Verify(t *Transaction) error {
 	// Verify tx inputs are keys in t.openTransactions
 	for _, input := range t.inputs {
 		if val, ok := bc.openTransactions[input]; ok {
-			if _, ok = val[t.sender]; !ok {
+			if _, ok = val[publicKeyString(t.sender)]; !ok {
 				return errors.New("Sender does not own this transaction")
 			}
 		} else {
@@ -146,7 +147,7 @@ func (bc *BlockChain) Verify(t *Transaction) error {
 	inputTotal := 0
 	for _, inputSha := range t.inputs {
 		outputAmounts, _ := bc.openTransactions[inputSha]
-		senderAmount, _ := outputAmounts[t.sender]
+		senderAmount, _ := outputAmounts[publicKeyString(t.sender)]
 		inputTotal += senderAmount
 	}
 

@@ -61,6 +61,39 @@ func LoadKey(keyname string) (*rsa.PrivateKey, error) {
 	return privKey, nil
 }
 
+func LoadPublicKey(keyname string) (*rsa.PublicKey, error) {
+	pubKeyPem, err := ioutil.ReadFile(keyname)
+	if err != nil {
+		return nil, err
+	}
+
+	pubBlock, _ := pem.Decode([]byte(pubKeyPem))
+	if pubBlock == nil {
+		return nil, errors.New("failed to parse public key PEM block")
+	}
+
+	pubKey, err := x509.ParsePKIXPublicKey(pubBlock.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	switch pubKey.(type) {
+	case *rsa.PublicKey:
+		return pubKey.(*rsa.PublicKey), nil
+	default:
+		return nil, errors.New("invalid key format")
+	}
+}
+
+func publicKeyString(key rsa.PublicKey) string {
+	s, err := x509.MarshalPKIXPublicKey(&key)
+	if err != nil {
+		fmt.Println("Unexpected error unmarshalling:", err)
+		panic("unreachable code")
+	}
+	return string(s)
+}
+
 // func (coin *Coin) Verify() error {
 
 // 	for i := 1; i < len(*coin); i++ {

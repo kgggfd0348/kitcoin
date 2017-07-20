@@ -27,9 +27,9 @@ import (
 //     transactions (they all have to be owned by the same key)
 type Transaction struct {
 	inputs    []SHA
-	sender    *rsa.PublicKey
-	recipient *rsa.PublicKey
-	outputs   map[*rsa.PublicKey]int
+	sender    rsa.PublicKey
+	recipient rsa.PublicKey
+	outputs   map[string]int
 	signature []byte
 }
 
@@ -40,31 +40,27 @@ func (t Transaction) String() string {
 // Computes the hash of a transaction by concatenating the hashes of
 // the transaction's inputs with the key of the transaction's
 // recipient.
-func (t *Transaction) Hash() (SHA, error) {
+func (t *Transaction) Hash() SHA {
 	toHash := make([]byte, 0)
 	for _, input := range t.inputs {
 		toHash = append(toHash, input[:]...)
 	}
 
 	for key, _ := range t.outputs {
-		keyBytes, err := x509.MarshalPKIXPublicKey(key)
-		if err != nil {
-			var empty SHA
-			return empty, err
-		}
-		toHash = append(toHash, keyBytes...)
+		toHash = append(toHash, []byte(key)...)
 	}
 
 	toHash = append(toHash, t.signature...)
 
 	hash := sha256.Sum256(toHash)
-	return hash, nil
+	return hash
 }
 
-func bytesToSign(recipient *rsa.PublicKey, inputHashes []SHA) (SHA, error) {
-	bytesToHash, err := x509.MarshalPKIXPublicKey(recipient)
+func bytesToSign(recipient rsa.PublicKey, inputHashes []SHA) (SHA, error) {
+	bytesToHash, err := x509.MarshalPKIXPublicKey(&recipient)
 	if err != nil {
 		var empty SHA
+		fmt.Println("marshaling error")
 		return empty, err
 	}
 	for _, inputHash := range inputHashes {
@@ -76,10 +72,13 @@ func bytesToSign(recipient *rsa.PublicKey, inputHashes []SHA) (SHA, error) {
 // Creates a new transaction struct, verifying that the input
 // transactions have enough funds and sending any remaining funds from
 // the input transactions back to the sender.
-func NewTransaction(inputs []Transaction, sender *rsa.PrivateKey, recipient *rsa.PublicKey, amount int) (*Transaction, error) {
+func NewTransaction(inputs []Transaction, sender *rsa.PrivateKey, recipient rsa.PublicKey, amount int) (*Transaction, error) {
+	senderKeyString := publicKeyString(sender.PublicKey)
+	recipientKeyString := publicKeyString(recipient)
+
 	inputTotal := 0
 	for _, inputTx := range inputs {
-		inputTotal += inputTx.outputs[&sender.PublicKey]
+		inputTotal += inputTx.outputs[senderKeyString]
 	}
 
 	if amount > inputTotal {
@@ -88,20 +87,17 @@ func NewTransaction(inputs []Transaction, sender *rsa.PrivateKey, recipient *rsa
 
 	change := inputTotal - amount
 
-	outputs := make(map[*rsa.PublicKey]int)
-	outputs[recipient] = amount
+	outputs := make(map[string]int)
+	outputs[recipientKeyString] = amount
 
 	if change > 0 {
-		outputs[&sender.PublicKey] = change
+		outputs[senderKeyString] = change
 	}
 
 	inputHashes := make([]SHA, 0)
 	for _, input := range inputs {
-		hash, err := input.Hash()
+		hash := input.Hash()
 		inputHashes = append(inputHashes, hash)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	hashed, err := bytesToSign(recipient, inputHashes)
@@ -114,7 +110,7 @@ func NewTransaction(inputs []Transaction, sender *rsa.PrivateKey, recipient *rsa
 		return nil, err
 	}
 
-	senderPubKey := &sender.PublicKey
+	senderPubKey := sender.PublicKey
 
 	return &Transaction{
 		inputHashes,
