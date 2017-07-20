@@ -19,14 +19,19 @@ type Block struct {
 }
 
 type BlockChain struct {
-	blocks []Block
+	blocks           []Block
+	openTransactions map[SHA]map[*rsa.PublicKey]int
 }
 
 func NewBlockChain() BlockChain {
 	genesisHash := sha256.Sum256([]byte("genesis"))
 	blocks := make([]Block, 0)
 	blocks = append(blocks, Block{genesisHash, 0, make([]Transaction, 0)})
-	return BlockChain{blocks}
+	openTransactions := make(map[SHA]map[*rsa.PublicKey]int)
+	return BlockChain{
+		blocks,
+		openTransactions,
+	}
 }
 
 func (block *Block) Hash() (SHA, error) {
@@ -81,7 +86,7 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 //   another transaction)
 
 // How to store information on the block chain? Keep a set of transactions open for spending?
-func (bc *BlockChain) Verify(t Transaction) error {
+func (bc *BlockChain) Verify(t *Transaction) error {
 	// Verify signature
 	hashed, err := bytesToSign(t.recipient, t.inputs)
 	if err != nil {
@@ -91,17 +96,16 @@ func (bc *BlockChain) Verify(t Transaction) error {
 	if err != nil {
 		return err
 	}
-	// Verify tx not used as input elsewhere in BlockChain
-	for _, block := range bc.blocks {
-		for _, transaction := range block.transactions {
-			for _, input := range transaction.inputs {
-				for _, currInput := range t.inputs {
-					if input == currInput {
-						return errors.New("Transaction input has already been used")
-					}
-				}
+	// Verify tx inputs are keys in t.openTransactions
+	for _, input := range t.inputs {
+		if val, ok := bc.openTransactions[input]; ok {
+			if _, ok = val[t.sender]; !ok {
+				return errors.New("Sender does not own this transaction")
 			}
+		} else {
+			return errors.New("Transaction not open")
 		}
 	}
+
 	return nil
 }
