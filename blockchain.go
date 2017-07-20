@@ -68,3 +68,13 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 	bc.blocks = append(bc.blocks, newBlock)
 	return nil
 }
+
+// How to verify a transaction on the block chain:
+// - Check that the
+//   transaction is internally consistent (inputs equal outputs,
+//   signature is valid)
+// - Check that each of the transaction's inputs
+//   is open for spending (i.e. hasn't been used yet as an input to
+//   another transaction)
+
+// How to store information on the block chain? Keep a set of transactions open for spending?
