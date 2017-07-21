@@ -19,9 +19,25 @@ type Block struct {
 	transactions []Transaction
 }
 
+func (block *Block) String() string {
+	transactions := ""
+	for _, t := range block.transactions {
+		transactions += t.String()
+	}
+	return fmt.Sprintf("{prevHash: %x,\n transactions: [%s]}", block.prevHash, transactions)
+}
+
 type BlockChain struct {
 	blocks           []Block
 	openTransactions map[SHA]map[string]int
+}
+
+func (bc *BlockChain) String() string {
+	blocks := ""
+	for _, block := range bc.blocks {
+		blocks += block.String()
+	}
+	return fmt.Sprintf("{blocks: [%s],\nopenTransactions: %d}", blocks, len(bc.openTransactions))
 }
 
 func NewBlockChain() BlockChain {
@@ -153,11 +169,14 @@ func (bc *BlockChain) Verify(t *Transaction) error {
 
 	outputTotal := 0
 	for _, amount := range t.Outputs {
+		if amount < 0 {
+			return errors.New("Cannot have negative output amount")
+		}
 		outputTotal += amount
 	}
 
 	if inputTotal != outputTotal {
-		return errors.New("tx inputs do not match outputs")
+		return fmt.Errorf("tx inputs (%d) do not match outputs (%d)", inputTotal, outputTotal)
 	}
 
 	return nil

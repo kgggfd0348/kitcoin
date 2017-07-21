@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"errors"
 	"fmt"
 )
 
@@ -34,7 +33,7 @@ type Transaction struct {
 }
 
 func (t Transaction) String() string {
-	return fmt.Sprintf("<Transaction %x>", t.Signature)
+	return fmt.Sprintf("<Transaction %x>", t.Hash())
 }
 
 // Computes the hash of a transaction by concatenating the hashes of
@@ -79,10 +78,6 @@ func NewTransaction(inputs []Transaction, sender *rsa.PrivateKey, recipient rsa.
 	inputTotal := 0
 	for _, inputTx := range inputs {
 		inputTotal += inputTx.Outputs[senderKeyString]
-	}
-
-	if amount > inputTotal {
-		return nil, errors.New("insufficient amount in input transactions")
 	}
 
 	change := inputTotal - amount

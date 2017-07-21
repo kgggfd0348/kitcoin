@@ -1,13 +1,13 @@
 package ktcoin
 
 import (
-	"net"
-	"os"
-	"fmt"
-	"net/rpc"
-	"crypto/rsa"
 	"crypto"
 	"crypto/rand"
+	"crypto/rsa"
+	"fmt"
+	"net"
+	"net/rpc"
+	"os"
 )
 
 type BlockChainServer struct {
@@ -26,6 +26,9 @@ func (s *BlockChainServer) Transact(tx Transaction, accepted *bool) error {
 		return err
 	}
 	err = s.blockchain.addNextBlock([]Transaction{*genesisTx, tx})
+	if err == nil {
+		*accepted = true
+	}
 	return err
 }
 
@@ -36,7 +39,7 @@ func (s *BlockChainServer) GetOpenInputs(key rsa.PublicKey, openInputs *map[SHA]
 
 func RunNode() {
 	bc := NewBlockChain()
-	server := BlockChainServer { &bc }
+	server := BlockChainServer{&bc}
 
 	// Build a seed transaction to serve as input
 	key, err := LoadKey("id_rsa")
@@ -54,7 +57,7 @@ func RunNode() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(server.blockchain)
+	fmt.Printf("Server.BlockChain: %v", server.blockchain)
 
 	rpc.Register(&server)
 	ln, err := net.Listen("tcp", ":8000")
@@ -64,5 +67,5 @@ func RunNode() {
 		os.Exit(1)
 	}
 
-	rpc.Accept(ln) 
+	rpc.Accept(ln)
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -11,6 +12,10 @@ import (
 )
 
 type SHA [32]byte
+
+func (sha *SHA) String() string {
+	return fmt.Sprintf("%x", *sha)
+}
 
 func GenerateKey(keyname string) error {
 	fmt.Println("Generating RSA private key...")
@@ -91,7 +96,7 @@ func publicKeyString(key rsa.PublicKey) string {
 		fmt.Println("Unexpected error unmarshalling:", err)
 		panic("unreachable code")
 	}
-	return string(s)
+	return hex.EncodeToString(s)
 }
 
 // func (coin *Coin) Verify() error {

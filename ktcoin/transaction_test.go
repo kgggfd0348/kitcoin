@@ -40,11 +40,4 @@ func TestNewTransaction(t *testing.T) {
 	if tx.Outputs[publicKeyString(sender.PublicKey)] != 24 || tx.Outputs[publicKeyString(recipient.PublicKey)] != 1 {
 		t.Fail()
 	}
-
-	// Try sending too much.
-	_, err = NewTransaction(inputs, sender, recipient.PublicKey, 30)
-
-	if err == nil {
-		t.Fail()
-	}
 }
