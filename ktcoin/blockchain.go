@@ -70,7 +70,7 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 		if i == 0 {
 			// Special case: money from nothing
 			outputTotal := 0
-			for _, v := range t.outputs {
+			for _, v := range t.Outputs {
 				outputTotal += v
 			}
 			if outputTotal != 25 {
@@ -103,11 +103,11 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 	fmt.Println(len(bc.blocks))
 
 	for _, transaction := range transactions {
-		for _, input := range transaction.inputs {
-			delete(bc.openTransactions[input], publicKeyString(transaction.sender))
+		for _, input := range transaction.Inputs {
+			delete(bc.openTransactions[input], publicKeyString(transaction.Sender))
 		}
 		hashedTransaction := transaction.Hash()
-		bc.openTransactions[hashedTransaction] = transaction.outputs
+		bc.openTransactions[hashedTransaction] = transaction.Outputs
 	}
 	return nil
 }
@@ -123,19 +123,19 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 // How to store information on the block chain? Keep a set of transactions open for spending?
 func (bc *BlockChain) Verify(t *Transaction) error {
 	// Verify signature
-	hashed, err := bytesToSign(t.recipient, t.inputs)
+	hashed, err := bytesToSign(t.Recipient, t.Inputs)
 	if err != nil {
 		return err
 	}
-	err = rsa.VerifyPKCS1v15(&t.sender, crypto.SHA256, hashed[:], t.signature)
+	err = rsa.VerifyPKCS1v15(&t.Sender, crypto.SHA256, hashed[:], t.Signature)
 	if err != nil {
 		return errors.New("invalid signature")
 	}
 
 	// Verify tx inputs are keys in t.openTransactions
-	for _, input := range t.inputs {
+	for _, input := range t.Inputs {
 		if val, ok := bc.openTransactions[input]; ok {
-			if _, ok = val[publicKeyString(t.sender)]; !ok {
+			if _, ok = val[publicKeyString(t.Sender)]; !ok {
 				return errors.New("Sender does not own this transaction")
 			}
 		} else {
@@ -145,14 +145,14 @@ func (bc *BlockChain) Verify(t *Transaction) error {
 
 	// Verify tx amounts are valid (inputs equal outputs)
 	inputTotal := 0
-	for _, inputSha := range t.inputs {
+	for _, inputSha := range t.Inputs {
 		outputAmounts, _ := bc.openTransactions[inputSha]
-		senderAmount, _ := outputAmounts[publicKeyString(t.sender)]
+		senderAmount, _ := outputAmounts[publicKeyString(t.Sender)]
 		inputTotal += senderAmount
 	}
 
 	outputTotal := 0
-	for _, amount := range t.outputs {
+	for _, amount := range t.Outputs {
 		outputTotal += amount
 	}
 

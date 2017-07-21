@@ -26,15 +26,15 @@ import (
 //  3. The signature must match the owner of all the input
 //     transactions (they all have to be owned by the same key)
 type Transaction struct {
-	inputs    []SHA
-	sender    rsa.PublicKey
-	recipient rsa.PublicKey
-	outputs   map[string]int
-	signature []byte
+	Inputs    []SHA
+	Sender    rsa.PublicKey
+	Recipient rsa.PublicKey
+	Outputs   map[string]int
+	Signature []byte
 }
 
 func (t Transaction) String() string {
-	return fmt.Sprintf("<Transaction %x>", t.signature)
+	return fmt.Sprintf("<Transaction %x>", t.Signature)
 }
 
 // Computes the hash of a transaction by concatenating the hashes of
@@ -42,15 +42,15 @@ func (t Transaction) String() string {
 // recipient.
 func (t *Transaction) Hash() SHA {
 	toHash := make([]byte, 0)
-	for _, input := range t.inputs {
+	for _, input := range t.Inputs {
 		toHash = append(toHash, input[:]...)
 	}
 
-	for key, _ := range t.outputs {
+	for key, _ := range t.Outputs {
 		toHash = append(toHash, []byte(key)...)
 	}
 
-	toHash = append(toHash, t.signature...)
+	toHash = append(toHash, t.Signature...)
 
 	hash := sha256.Sum256(toHash)
 	return hash
@@ -78,7 +78,7 @@ func NewTransaction(inputs []Transaction, sender *rsa.PrivateKey, recipient rsa.
 
 	inputTotal := 0
 	for _, inputTx := range inputs {
-		inputTotal += inputTx.outputs[senderKeyString]
+		inputTotal += inputTx.Outputs[senderKeyString]
 	}
 
 	if amount > inputTotal {

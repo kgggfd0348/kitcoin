@@ -15,7 +15,17 @@ type BlockChainServer struct {
 }
 
 func (s *BlockChainServer) Transact(tx Transaction, accepted *bool) error {
-	err := s.blockchain.addNextBlock([]Transaction{tx})
+	// make a genesis tx
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+
+	genesisTx, err := NewTransaction(make([]Transaction, 0), key, tx.Sender, 25)
+	if err != nil {
+		return err
+	}
+	err = s.blockchain.addNextBlock([]Transaction{*genesisTx, tx})
 	return err
 }
 

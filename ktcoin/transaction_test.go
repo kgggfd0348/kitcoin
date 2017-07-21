@@ -32,12 +32,12 @@ func TestNewTransaction(t *testing.T) {
 
 	dummyTxHash := dummyTransaction.Hash()
 
-	if len(tx.inputs) != 1 || tx.inputs[0] != dummyTxHash {
+	if len(tx.Inputs) != 1 || tx.Inputs[0] != dummyTxHash {
 		t.Fail()
 	}
 
 	// Check for change.
-	if tx.outputs[publicKeyString(sender.PublicKey)] != 24 || tx.outputs[publicKeyString(recipient.PublicKey)] != 1 {
+	if tx.Outputs[publicKeyString(sender.PublicKey)] != 24 || tx.Outputs[publicKeyString(recipient.PublicKey)] != 1 {
 		t.Fail()
 	}
 
