@@ -1,63 +1,67 @@
 package ktcoin
 
 import (
-	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
 	"net"
 	"net/rpc"
 	"os"
+	"sync"
 )
 
 type BlockChainServer struct {
-	blockchain *BlockChain
+	mu               *sync.Mutex
+	knownNodes       []string
+	openTransactions []Transaction
+	blockchain       *BlockChain
+	//  candidateChains	 ???
 }
 
 func (s *BlockChainServer) Transact(tx Transaction, accepted *bool) error {
-	// make a genesis tx
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return err
-	}
-
-	genesisTx, err := NewTransaction(make([]Transaction, 0), key, tx.Sender, 25)
-	if err != nil {
-		return err
-	}
-	err = s.blockchain.addNextBlock([]Transaction{*genesisTx, tx})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	err := s.blockchain.Verify(&tx)
 	if err == nil {
+		s.openTransactions = append(s.openTransactions, tx)
 		*accepted = true
+		return nil
+	} else {
+		return err
 	}
-	return err
 }
 
 func (s *BlockChainServer) GetOpenInputs(key rsa.PublicKey, openInputs *map[SHA]int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	*openInputs = s.blockchain.GetOpenInputs(key)
 	return nil
 }
 
-func RunNode() {
-	bc := NewBlockChain()
-	server := BlockChainServer{&bc}
+func mineBlocks(server *BlockChainServer, key *rsa.PrivateKey) {
+	for {
+		server.mu.Lock()
 
-	// Build a seed transaction to serve as input
-	key, err := LoadKey("id_rsa")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		genesisTx, err := NewTransaction(make([]Transaction, 0), key, key.PublicKey, 25)
+		txs := append([]Transaction{*genesisTx}, server.openTransactions...)
+
+		err = server.blockchain.addNextBlock(1, 100, txs)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			server.openTransactions = make([]Transaction, 0)
+			// Broadcast the new block!
+		}
+
+		server.mu.Unlock()
 	}
-	seedOutputs := make(map[string]int)
-	// Give sender 2 coins to send
-	seedOutputs[publicKeyString(key.PublicKey)] = 25
-	bytes, _ := bytesToSign(key.PublicKey, []SHA{})
-	seedSignature, _ := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, bytes[:])
-	seedTransaction := Transaction{[]SHA{}, key.PublicKey, key.PublicKey, seedOutputs, seedSignature}
-	err = server.blockchain.addNextBlock([]Transaction{seedTransaction})
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Printf("Server.BlockChain: %v", server.blockchain)
+}
+
+func RunNode(knownNodes []string, key *rsa.PrivateKey) {
+	bc := NewBlockChain()
+	mutex := sync.Mutex{}
+	server := BlockChainServer{ &mutex, knownNodes, []Transaction{}, &bc}
 
 	rpc.Register(&server)
 	ln, err := net.Listen("tcp", ":8000")
@@ -67,5 +71,6 @@ func RunNode() {
 		os.Exit(1)
 	}
 
+	go mineBlocks(&server, key)
 	rpc.Accept(ln)
 }

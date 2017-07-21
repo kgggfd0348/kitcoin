@@ -36,7 +36,7 @@ func TestVerifyTransaction(t *testing.T) {
 		t.Fail()
 	}
 
-	err = bc.addNextBlock(inputs)
+	err = bc.addNextBlock(1, 10000, inputs)
 	if err != nil {
 		t.Error(err)
 	}
@@ -68,7 +68,7 @@ func TestAddBlock(t *testing.T) {
 		signature,
 	}
 	transactions = append(transactions, tx)
-	err := bc.addNextBlock(transactions)
+	err := bc.addNextBlock(1, 10000, transactions)
 	if err != nil {
 		t.Error(err)
 	}

@@ -80,7 +80,17 @@ func (bc *BlockChain) GetOpenInputs(key rsa.PublicKey) map[SHA]int {
 	return openInputs
 }
 
-func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
+func (block *Block) isValid(difficulty int) bool {
+	hashedBlock := block.Hash()
+	for i := 0; i < difficulty; i++ {
+		if hashedBlock[i] != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (bc *BlockChain) addNextBlock(difficulty int, limit int, transactions []Transaction) error {
 	// Verify transactions
 	for i, t := range transactions {
 		if i == 0 {
@@ -107,16 +117,16 @@ func (bc *BlockChain) addNextBlock(transactions []Transaction) error {
 
 	nonce := 0
 	newBlock := Block{prevHash, nonce, transactions}
-	hashedBlock := newBlock.Hash()
 
-	for hashedBlock[0] != 0 {
+	for i := 0; !newBlock.isValid(difficulty); i++ {
+		if i >= limit {
+			return errors.New("limit reached")
+		}
 		newBlock.nonce++
-		hashedBlock = newBlock.Hash()
 	}
 
 	// Append the block to the chain
 	bc.blocks = append(bc.blocks, newBlock)
-	fmt.Println(len(bc.blocks))
 
 	for _, transaction := range transactions {
 		for _, input := range transaction.Inputs {
