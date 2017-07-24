@@ -28,7 +28,8 @@ func (block *Block) String() string {
 }
 
 type BlockChain struct {
-	blocks           []Block
+	latestBlock      SHA
+	blocks           map[SHA]Block
 	openTransactions map[SHA]map[string]int
 }
 
@@ -42,10 +43,13 @@ func (bc *BlockChain) String() string {
 
 func NewBlockChain() BlockChain {
 	genesisHash := sha256.Sum256([]byte("genesis"))
-	blocks := make([]Block, 0)
-	blocks = append(blocks, Block{genesisHash, 0, make([]Transaction, 0)})
+	blocks := make(map[SHA]Block)
+	firstBlock := Block{genesisHash, 0, make([]Transaction, 0)}
+	firstSha := firstBlock.Hash()
+	blocks[firstSha] = firstBlock
 	openTransactions := make(map[SHA]map[string]int)
 	return BlockChain{
+		firstSha,
 		blocks,
 		openTransactions,
 	}
@@ -112,8 +116,7 @@ func (bc *BlockChain) addNextBlock(difficulty int, limit int, nonce int, transac
 	}
 
 	// Look for the magic hash value
-	mostRecentBlock := bc.blocks[len(bc.blocks)-1]
-	prevHash := mostRecentBlock.Hash()
+	prevHash := bc.latestBlock
 
 	newBlock := Block{prevHash, nonce, transactions}
 
@@ -125,7 +128,9 @@ func (bc *BlockChain) addNextBlock(difficulty int, limit int, nonce int, transac
 	}
 
 	// Append the block to the chain
-	bc.blocks = append(bc.blocks, newBlock)
+	newBlockSha := newBlock.Hash()
+	bc.blocks[newBlockSha] = newBlock
+	bc.latestBlock = newBlockSha
 
 	for _, transaction := range transactions {
 		for _, input := range transaction.Inputs {

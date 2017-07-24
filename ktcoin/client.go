@@ -20,7 +20,7 @@ func SendTransaction(sender *rsa.PrivateKey, recipient *rsa.PublicKey, amount in
 
 	reply := make(map[SHA]int)
 	err = client.Call("BlockChainServer.GetOpenInputs", &sender.PublicKey, &reply)
-	fmt.Printf("Open Inputs: %v", reply)
+	fmt.Printf("Open Inputs: %v\n", reply)
 	if err != nil {
 		return err
 	}
@@ -43,9 +43,8 @@ func SendTransaction(sender *rsa.PrivateKey, recipient *rsa.PublicKey, amount in
 	outputs[publicKeyString(*recipient)] = amount
 
 	tx := Transaction{shas, sender.PublicKey, *recipient, outputs, signature}
-	fmt.Print(outputs)
+	fmt.Println("Outputs: ", outputs)
 
-	fmt.Println("running the new code")
 	err = client.Call("BlockChainServer.Transact", tx, &success)
 	if err != nil {
 		return err

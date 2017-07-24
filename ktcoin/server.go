@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"errors"
 )
 
 const NonceAttempts = 10000
@@ -29,8 +30,9 @@ type BlockChainServer struct {
 	openTransactions     []Transaction
 	blockchain           *BlockChain
 	currentNonce         int
-	//  candidateChains	 ???
 }
+
+//// Procedures for client-server communication
 
 func (s *BlockChainServer) Transact(tx Transaction, accepted *bool) error {
 	callbackChannel := make(chan error)
@@ -55,6 +57,26 @@ func (s *BlockChainServer) GetOpenInputs(key rsa.PublicKey, openInputs *map[SHA]
 	return nil
 }
 
+//// Procedures for server-to-server communication
+
+func (s *BlockChainServer) GetBlock(sha SHA, block *Block) error {
+	latestBlock, exists := s.blockchain.blocks[sha]
+	*block = latestBlock
+	if !exists {
+		return errors.New("nonexistent block")
+	}
+	return nil
+}
+
+func (s *BlockChainServer) SendBlock(block Block, accepted *bool) error {
+	return nil
+}
+
+func (s *BlockChainServer) SendTransaction(transaction Transaction, accepted *bool) error {
+	return nil
+}
+
+
 func runServer(server *BlockChainServer, key *rsa.PrivateKey) {
 	for {
 		select {
@@ -71,6 +93,10 @@ func runServer(server *BlockChainServer, key *rsa.PrivateKey) {
 		// Otherwise keep mining for blocks
 		default:
 			genesisTx, err := NewTransaction(make([]Transaction, 0), key, key.PublicKey, 25)
+			// Hack: in order to make each coin unique, the
+			// transaction that initiates it has a fake input SHA,
+			// which is the SHA of the previous block.
+			genesisTx.Inputs = append(genesisTx.Inputs, server.blockchain.latestBlock)
 			txs := append([]Transaction{*genesisTx}, server.openTransactions...)
 
 			err = server.blockchain.addNextBlock(NonceDifficulty, NonceAttempts, server.currentNonce, txs)
@@ -82,7 +108,8 @@ func runServer(server *BlockChainServer, key *rsa.PrivateKey) {
 			} else {
 				server.openTransactions = make([]Transaction, 0)
 				fmt.Println("New Block found")
-				// Broadcast the new block!
+				latestBlock := server.blockchain.blocks[server.blockchain.latestBlock]
+				fmt.Println("Block: ", &latestBlock)
 			}
 		}
 	}
