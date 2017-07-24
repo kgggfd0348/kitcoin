@@ -2,16 +2,16 @@ package ktcoin
 
 import (
 	"crypto/rsa"
+	"errors"
 	"fmt"
 	"net"
 	"net/rpc"
 	"os"
-	"errors"
 )
 
 const NonceAttempts = 10000
 
-const NonceDifficulty = 2
+const NonceDifficulty = 3
 
 type TransactionRequest struct {
 	tx              Transaction
@@ -23,13 +23,65 @@ type OpenInputRequest struct {
 	callbackChannel chan map[SHA]int
 }
 
+type GetBlockRequest struct {
+	sha             SHA
+	callbackChannel chan Block
+}
+
+type NewBlockNotice struct {
+	block Block
+}
+
+type RPCHandler interface {
+	rpcHandle(server *BlockChainServer)
+}
+
+func (req TransactionRequest) rpcHandle(server *BlockChainServer) {
+	err := server.blockchain.Verify(&req.tx)
+	if err == nil {
+		server.openTransactions = append(server.openTransactions, req.tx)
+	}
+	req.callbackChannel <- err
+}
+
+func (req OpenInputRequest) rpcHandle(server *BlockChainServer) {
+	req.callbackChannel <- server.blockchain.GetOpenInputs(req.key)
+}
+
+func (req GetBlockRequest) rpcHandle(server *BlockChainServer) {
+	req.callbackChannel <- server.blockchain.blocks[req.sha]
+}
+
+func (notice NewBlockNotice) rpcHandle(server *BlockChainServer) {
+	// Validate the block.  1. Transactions must be valid.  2. Block
+	// must hash to a difficult-enough SHA.  3. Block's previous hash
+	// must equal s.blockchain.latestBlock, or link back to it
+	// eventually.
+	for _, t := range notice.block.transactions {
+		err := server.blockchain.Verify(&t)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+
+	if !notice.block.isValid(NonceDifficulty) {
+		fmt.Println("block hash does not satisfy proof of work")
+		return
+	}
+
+	if notice.block.prevHash != server.blockchain.latestBlock {
+		fmt.Println("block is not next in the chain")
+		return
+	}
+}
+
 type BlockChainServer struct {
-	incomingTransactions chan TransactionRequest
-	openInputRequests    chan OpenInputRequest
-	knownNodes           []string
-	openTransactions     []Transaction
-	blockchain           *BlockChain
-	currentNonce         int
+	requests         chan RPCHandler
+	knownNodes       []string
+	openTransactions []Transaction
+	blockchain       *BlockChain
+	currentNonce     int
 }
 
 //// Procedures for client-server communication
@@ -37,7 +89,7 @@ type BlockChainServer struct {
 func (s *BlockChainServer) Transact(tx Transaction, accepted *bool) error {
 	callbackChannel := make(chan error)
 	txReq := TransactionRequest{tx, callbackChannel}
-	s.incomingTransactions <- txReq
+	s.requests <- txReq
 
 	err := <-callbackChannel
 	if err == nil {
@@ -51,7 +103,7 @@ func (s *BlockChainServer) Transact(tx Transaction, accepted *bool) error {
 func (s *BlockChainServer) GetOpenInputs(key rsa.PublicKey, openInputs *map[SHA]int) error {
 	callbackChannel := make(chan map[SHA]int)
 	openInputRequest := OpenInputRequest{key, callbackChannel}
-	s.openInputRequests <- openInputRequest
+	s.requests <- openInputRequest
 
 	*openInputs = <-callbackChannel
 	return nil
@@ -60,36 +112,30 @@ func (s *BlockChainServer) GetOpenInputs(key rsa.PublicKey, openInputs *map[SHA]
 //// Procedures for server-to-server communication
 
 func (s *BlockChainServer) GetBlock(sha SHA, block *Block) error {
-	latestBlock, exists := s.blockchain.blocks[sha]
-	*block = latestBlock
-	if !exists {
+	cb := make(chan Block)
+	s.requests <- GetBlockRequest{sha, cb}
+	*block = <-cb
+	if block == nil {
 		return errors.New("nonexistent block")
 	}
 	return nil
 }
 
-func (s *BlockChainServer) SendBlock(block Block, accepted *bool) error {
+func (s *BlockChainServer) NewBlock(block Block, accepted *bool) error {
+	s.requests <- NewBlockNotice{block}
 	return nil
 }
 
-func (s *BlockChainServer) SendTransaction(transaction Transaction, accepted *bool) error {
+func (s *BlockChainServer) NewTransaction(transaction Transaction, accepted *bool) error {
+	//TODO
 	return nil
 }
-
 
 func runServer(server *BlockChainServer, key *rsa.PrivateKey) {
 	for {
 		select {
-		// If there's a new transaction, handle it
-		case txReq := <-server.incomingTransactions:
-			err := server.blockchain.Verify(&txReq.tx)
-			if err == nil {
-				server.openTransactions = append(server.openTransactions, txReq.tx)
-			}
-			txReq.callbackChannel <- err
-		// If there's a request for open inputs, handle it
-		case openInputReq := <-server.openInputRequests:
-			openInputReq.callbackChannel <- server.blockchain.GetOpenInputs(openInputReq.key)
+		case req := <-server.requests:
+			req.rpcHandle(server)
 		// Otherwise keep mining for blocks
 		default:
 			genesisTx, err := NewTransaction(make([]Transaction, 0), key, key.PublicKey, 25)
@@ -110,6 +156,19 @@ func runServer(server *BlockChainServer, key *rsa.PrivateKey) {
 				fmt.Println("New Block found")
 				latestBlock := server.blockchain.blocks[server.blockchain.latestBlock]
 				fmt.Println("Block: ", &latestBlock)
+				for i, node := range server.knownNodes {
+					fmt.Printf("Sending block to node %d (%s)\n", i, node)
+					client, err := rpc.Dial("tcp", node)
+					if err != nil {
+						fmt.Println(err)
+					}
+
+					var result bool // unused
+					err = client.Call("BlockChainServer.NewBlock", latestBlock, &result)
+					if err != nil {
+						fmt.Println(err)
+					}
+				}
 			}
 		}
 	}
@@ -117,9 +176,14 @@ func runServer(server *BlockChainServer, key *rsa.PrivateKey) {
 
 func RunNode(knownNodes []string, key *rsa.PrivateKey) {
 	bc := NewBlockChain()
-	txRequestChan := make(chan TransactionRequest)
-	openInputRequestChan := make(chan OpenInputRequest)
-	server := BlockChainServer{txRequestChan, openInputRequestChan, knownNodes, []Transaction{}, &bc, 0}
+	requests := make(chan RPCHandler)
+	server := BlockChainServer{
+		requests,
+		knownNodes,
+		[]Transaction{},
+		&bc,
+		0,
+	}
 
 	rpc.Register(&server)
 	ln, err := net.Listen("tcp", ":8000")
