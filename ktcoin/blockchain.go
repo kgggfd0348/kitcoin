@@ -90,7 +90,7 @@ func (block *Block) isValid(difficulty int) bool {
 	return true
 }
 
-func (bc *BlockChain) addNextBlock(difficulty int, limit int, transactions []Transaction) error {
+func (bc *BlockChain) addNextBlock(difficulty int, limit int, nonce int, transactions []Transaction) error {
 	// Verify transactions
 	for i, t := range transactions {
 		if i == 0 {
@@ -115,7 +115,6 @@ func (bc *BlockChain) addNextBlock(difficulty int, limit int, transactions []Tra
 	mostRecentBlock := bc.blocks[len(bc.blocks)-1]
 	prevHash := mostRecentBlock.Hash()
 
-	nonce := 0
 	newBlock := Block{prevHash, nonce, transactions}
 
 	for i := 0; !newBlock.isValid(difficulty); i++ {
