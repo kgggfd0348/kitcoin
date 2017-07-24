@@ -1,0 +1,31 @@
+version: '2'
+
+services:
+  peer1:
+    build: .
+    container_name: ktcoin1
+    command: go run main.go peer2 peer3
+    ports:
+      - 8000
+    networks:
+      - my-net
+  peer2:
+    build: .
+    container_name: ktcoin2
+    command: go run main.go peer1 peer3
+    ports:
+      - 8000
+    networks:
+      - my-net
+  peer3:
+    build: .
+    container_name: ktcoin3
+    ports:
+      - 8000
+    command: go run main.go peer1 peer2
+    networks:
+      - my-net
+
+networks:
+  my-net:
+    driver: bridge

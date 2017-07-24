@@ -14,17 +14,17 @@ import (
 // SHA256 hash must have sufficient leading zeroes to satisfy the
 // proof of work property.
 type Block struct {
-	prevHash     SHA
-	nonce        int
-	transactions []Transaction
+	PrevHash     SHA
+	Nonce        int
+	Transactions []Transaction
 }
 
 func (block *Block) String() string {
 	transactions := ""
-	for _, t := range block.transactions {
+	for _, t := range block.Transactions {
 		transactions += t.String()
 	}
-	return fmt.Sprintf("{prevHash: %x,\n transactions: [%s]}", block.prevHash, transactions)
+	return fmt.Sprintf("{prevHash: %x,\n transactions: [%s]}", block.PrevHash, transactions)
 }
 
 type BlockChain struct {
@@ -57,12 +57,12 @@ func NewBlockChain() BlockChain {
 
 func (block *Block) Hash() SHA {
 	contents := make([]byte, 0)
-	contents = append(contents, block.prevHash[:]...)
+	contents = append(contents, block.PrevHash[:]...)
 	nonceBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(nonceBytes, uint64(block.nonce))
+	binary.LittleEndian.PutUint64(nonceBytes, uint64(block.Nonce))
 	contents = append(contents, nonceBytes...)
 
-	for _, t := range block.transactions {
+	for _, t := range block.Transactions {
 		hashedTransaction := t.Hash()
 		contents = append(contents, hashedTransaction[:]...)
 	}
@@ -124,7 +124,7 @@ func (bc *BlockChain) addNextBlock(difficulty int, limit int, nonce int, transac
 		if i >= limit {
 			return errors.New("limit reached")
 		}
-		newBlock.nonce++
+		newBlock.Nonce++
 	}
 
 	// Append the block to the chain

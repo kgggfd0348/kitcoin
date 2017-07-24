@@ -1,6 +1,8 @@
 package ktcoin
 
 import (
+	"crypto"
+	"crypto/rand"
 	"crypto/rsa"
 	"errors"
 	"fmt"
@@ -11,7 +13,7 @@ import (
 
 const NonceAttempts = 10000
 
-const NonceDifficulty = 3
+const NonceDifficulty = 2
 
 type TransactionRequest struct {
 	tx              Transaction
@@ -57,12 +59,15 @@ func (notice NewBlockNotice) rpcHandle(server *BlockChainServer) {
 	// must hash to a difficult-enough SHA.  3. Block's previous hash
 	// must equal s.blockchain.latestBlock, or link back to it
 	// eventually.
-	for _, t := range notice.block.transactions {
-		err := server.blockchain.Verify(&t)
-		if err != nil {
-			fmt.Println(err)
-			return
+	for i, t := range notice.block.Transactions {
+		if i > 0 {
+			err := server.blockchain.Verify(&t)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
 		}
+		// TODO: validate the first special tx
 	}
 
 	if !notice.block.isValid(NonceDifficulty) {
@@ -70,10 +75,15 @@ func (notice NewBlockNotice) rpcHandle(server *BlockChainServer) {
 		return
 	}
 
-	if notice.block.prevHash != server.blockchain.latestBlock {
+	if notice.block.PrevHash != server.blockchain.latestBlock {
 		fmt.Println("block is not next in the chain")
 		return
 	}
+
+	fmt.Println("Accepting block.")
+	blockSha := notice.block.Hash()
+	server.blockchain.blocks[blockSha] = notice.block
+	server.blockchain.latestBlock = blockSha
 }
 
 type BlockChainServer struct {
@@ -132,18 +142,30 @@ func (s *BlockChainServer) NewTransaction(transaction Transaction, accepted *boo
 }
 
 func runServer(server *BlockChainServer, key *rsa.PrivateKey) {
+	fmt.Println("Running server...")
 	for {
 		select {
 		case req := <-server.requests:
 			req.rpcHandle(server)
 		// Otherwise keep mining for blocks
 		default:
-			genesisTx, err := NewTransaction(make([]Transaction, 0), key, key.PublicKey, 25)
 			// Hack: in order to make each coin unique, the
 			// transaction that initiates it has a fake input SHA,
 			// which is the SHA of the previous block.
-			genesisTx.Inputs = append(genesisTx.Inputs, server.blockchain.latestBlock)
-			txs := append([]Transaction{*genesisTx}, server.openTransactions...)
+
+			outputs := make(map[string]int)
+			outputs[publicKeyString(key.PublicKey)] = 25
+			inputs := []SHA{server.blockchain.latestBlock}
+			toSign, _ := bytesToSign(key.PublicKey, inputs)
+			signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, toSign[:])
+			genesisTx := Transaction{
+				inputs,
+				key.PublicKey,
+				key.PublicKey,
+				outputs,
+				signature,
+			}
+			txs := append([]Transaction{genesisTx}, server.openTransactions...)
 
 			err = server.blockchain.addNextBlock(NonceDifficulty, NonceAttempts, server.currentNonce, txs)
 			if err != nil {
@@ -158,16 +180,19 @@ func runServer(server *BlockChainServer, key *rsa.PrivateKey) {
 				fmt.Println("Block: ", &latestBlock)
 				for i, node := range server.knownNodes {
 					fmt.Printf("Sending block to node %d (%s)\n", i, node)
-					client, err := rpc.Dial("tcp", node)
+					client, err := rpc.Dial("tcp", node+":8000")
 					if err != nil {
 						fmt.Println(err)
+						break
 					}
 
 					var result bool // unused
-					err = client.Call("BlockChainServer.NewBlock", latestBlock, &result)
-					if err != nil {
-						fmt.Println(err)
-					}
+					go func() {
+						client.Call("BlockChainServer.NewBlock", latestBlock, &result)
+						if err != nil {
+							fmt.Println(err)
+						}
+					}()
 				}
 			}
 		}
